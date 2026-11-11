@@ -64,7 +64,8 @@ export function drawWallpaper(ctx, { text, bg, fg, font, W, H }) {
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
   if (!text || !text.trim()) return;
-  const fontAt = size => `${font.weight} ${size}px "${font.family}"`;
+  // font.scale: optical size fix for faces with small glyphs (e.g. Nanum Pen Script).
+  const fontAt = size => `${font.weight} ${size * (font.scale ?? 1)}px "${font.family}"`;
   const { fontSize, lines } = layout(text, W, H, size => s => { ctx.font = fontAt(size); return ctx.measureText(s).width; });
   ctx.font = fontAt(fontSize);
   ctx.fillStyle = fg;

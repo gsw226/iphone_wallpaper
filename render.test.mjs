@@ -92,6 +92,11 @@ function fakeCtx() {
   assert.deepEqual(texts[0].slice(1, 3), ['hi', 500]);
   assert.deepEqual(texts[0].slice(4), ['700 90px "Noto Sans KR"', '#fff', 'center', 'middle']);
 
+  const scaled = fakeCtx();
+  drawWallpaper(scaled, { text: 'hi', bg: '#000', fg: '#fff', font: { family: 'Nanum Pen Script', weight: 400, scale: 1.5 }, W: 1000, H: 2000 });
+  const st = scaled.calls.find(c => c[0] === 'fillText');
+  assert.equal(st[4], '400 135px "Nanum Pen Script"', 'font.scale multiplies the drawn px size');
+
   const empty = fakeCtx();
   drawWallpaper(empty, { text: '  \n ', bg: '#123', fg: '#fff', font: { family: 'X', weight: 400 }, W: 10, H: 20 });
   assert.deepEqual(empty.calls, [['fillRect', '#123', 0, 0, 10, 20]], 'whitespace-only -> background only');
