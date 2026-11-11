@@ -19,10 +19,15 @@ targets:
         CFBundleDisplayName: 문장 배경화면
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        UIAppFonts: []
+        UIAppFonts:
+          - NotoSansKR-VF.ttf
+          - NotoSerifKR-VF.ttf
+          - GowunDodum-Regular.ttf
+          - NanumPenScript-Regular.ttf
         CFBundleURLTypes:
           - CFBundleURLSchemes: [textwallpaper]
         NSPhotoLibraryAddUsageDescription: 만든 배경화면을 사진 앱에 저장합니다.
+        LSApplicationQueriesSchemes: [shortcuts]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: me.byeolki.textwallpaper

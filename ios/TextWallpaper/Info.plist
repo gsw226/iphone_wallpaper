@@ -29,10 +29,19 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>shortcuts</string>
+	</array>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>만든 배경화면을 사진 앱에 저장합니다.</string>
 	<key>UIAppFonts</key>
-	<array/>
+	<array>
+		<string>NotoSansKR-VF.ttf</string>
+		<string>NotoSerifKR-VF.ttf</string>
+		<string>GowunDodum-Regular.ttf</string>
+		<string>NanumPenScript-Regular.ttf</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
