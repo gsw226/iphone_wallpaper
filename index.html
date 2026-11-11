@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#e8e9eb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0e10" media="(prefers-color-scheme: dark)">
+<title>문장 배경화면</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@700&family=Noto+Serif+KR:wght@700&display=swap">
+<style>
+  :root {
+    --page: #e8e9eb;
+    --ink: #131416;
+    --muted: #686b72;
+    --line: #cdd0d5;
+    --field: #f5f6f7;
+    --gutter: 16px;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0d0e10;
+      --ink: #e9eaec;
+      --muted: #8c9098;
+      --line: #2a2c31;
+      --field: #17181b;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sr {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  main {
+    height: 100vh;
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: minmax(260px, 1fr) auto;
+    padding:
+      max(12px, env(safe-area-inset-top))
+      max(var(--gutter), env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom))
+      max(var(--gutter), env(safe-area-inset-left));
+    gap: 16px;
+  }
+
+  /* Preview */
+  .stage {
+    min-height: 0;
+    display: grid;
+    place-items: center;
+  }
+  .phone {
+    position: relative;
+    height: 100%;
+    max-width: 100%;
+    aspect-ratio: var(--ar, 1179 / 2556);
+    container-type: inline-size;
+    border-radius: 14% / 6.46%;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px var(--line);
+    color: #fff;
+  }
+  .phone canvas { display: block; width: 100%; height: 100%; }
+  .lock {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    opacity: 0.5;
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  }
+  .lock-date, .lock-time {
+    position: absolute; left: 0; right: 0;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .lock-date { top: 11%; font-size: 4.6cqw; font-weight: 600; }
+  .lock-time { top: 13%; font-size: 24cqw; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+  .lock-btn {
+    position: absolute;
+    bottom: 4.5%;
+    width: 12.5cqw; aspect-ratio: 1;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.45;
+  }
+  .lock-btn:first-of-type { left: 12%; }
+  .lock-btn:last-of-type { right: 12%; }
+
+  /* Controls */
+  .controls {
+    width: 100%;
+    max-width: 440px;
+    justify-self: center;
+    display: grid;
+    gap: 12px;
+  }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+
+  textarea {
+    width: 100%;
+    display: block;
+    resize: none;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--field);
+    color: var(--ink);
+    font: inherit;
+    font-size: 17px;
+    line-height: 1.45;
+    padding: 10px 12px;
+  }
+  textarea::placeholder { color: var(--muted); }
+  textarea:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+  .colors {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr) 6px repeat(2, 1fr);
+    gap: 8px;
+    align-items: center;
+  }
+  .colors::before { content: ""; grid-column: 7; grid-row: 1; height: 60%; width: 1px; background: var(--line); justify-self: center; }
+  .sw, .pick { position: relative; display: block; aspect-ratio: 1; max-width: 44px; width: 100%; justify-self: center; cursor: pointer; }
+  .sw input, .pick input {
+    position: absolute; inset: 0; margin: 0;
+    width: 100%; height: 100%;
+    opacity: 0; cursor: pointer;
+  }
+  .sw span, .pick span {
+    display: grid; place-items: center;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    transition: box-shadow 160ms ease;
+  }
+  .sw span {
+    border-radius: 10px;
+    background: var(--b);
+    color: var(--f);
+    font-weight: 600;
+    font-size: 15px;
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .pick span {
+    border-radius: 50%;
+    background: var(--c);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  #pickBg { grid-column: 8; }
+  .sw input:checked + span,
+  .pick.on span { box-shadow: 0 0 0 2px var(--page), 0 0 0 4px var(--ink); }
+  .sw input:focus-visible + span,
+  .pick input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 4px; }
+
+  .fonts {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  .ft { position: relative; display: block; cursor: pointer; }
+  .ft input { position: absolute; inset: 0; margin: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+  .ft span {
+    display: grid; place-items: center;
+    height: 44px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    font-size: 15px;
+    white-space: nowrap;
+    pointer-events: none;
+    transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+  }
+  .ft input:checked + span { background: var(--ink); color: var(--page); border-color: var(--ink); }
+  .ft input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .set {
+    height: 52px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--ink);
+    color: var(--page);
+    font: inherit;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: transform 160ms var(--ease-out), opacity 160ms ease;
+  }
+  .set:active { transform: scale(0.97); }
+  .set:disabled { opacity: 0.35; cursor: default; transform: none; }
+  .set[aria-busy="true"] { opacity: 0.6; cursor: progress; }
+  .set:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+  .aux {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+  }
+  .aux button, .aux a {
+    color: var(--muted);
+    background: none; border: 0; padding: 6px 0;
+    font: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--line);
+    text-underline-offset: 3px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .aux button:disabled { opacity: 0.5; cursor: default; }
+  .aux :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 2px; }
+
+  @media (min-width: 800px) {
+    main {
+      grid-template-rows: 1fr;
+      grid-template-columns: 1fr minmax(320px, 400px);
+      gap: 48px;
+      padding: 40px 56px;
+    }
+    .controls { align-self: center; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .set { transition: opacity 160ms ease; }
+    .set:active { transform: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="stage">
+    <div class="phone" id="phone">
+      <canvas id="preview" aria-label="잠금화면 미리보기" role="img"></canvas>
+      <div class="lock" aria-hidden="true">
+        <div class="lock-date" id="lockDate"></div>
+        <div class="lock-time" id="lockTime"></div>
+        <i class="lock-btn"></i><i class="lock-btn"></i>
+      </div>
+    </div>
+  </div>
+
+  <form class="controls" id="form" onsubmit="return false">
+    <label class="sr" for="text">문장</label>
+    <textarea id="text" rows="2" placeholder="천천히, 그러나 멈추지 않고." autocomplete="off" spellcheck="false"></textarea>
+
+    <fieldset class="colors" id="colors">
+      <legend class="sr">색</legend>
+      <label class="pick" id="pickBg" title="배경색"><input type="color" id="bg" aria-label="배경색 직접 고르기"><span></span></label>
+      <label class="pick" id="pickFg" title="글자색"><input type="color" id="fg" aria-label="글자색 직접 고르기"><span></span></label>
+    </fieldset>
+
+    <fieldset class="fonts" id="fonts">
+      <legend class="sr">글꼴</legend>
+    </fieldset>
+
+    <button type="button" class="set" id="set">배경화면으로 설정</button>
+    <div class="aux">
+      <button type="button" id="save">이미지로 저장</button>
+      <a href="README.md#단축어-설치">단축어 설치 방법</a>
+    </div>
+  </form>
+</main>
+
+<script type="module">
+import { LAYOUT, drawWallpaper, ensureFont } from './render.js';
+
+const PRESETS = [
+  { bg: '#0e0e0e', fg: '#f2f2f0', name: '검정 바탕, 흰 글자' },
+  { bg: '#f4f4f1', fg: '#161616', name: '흰 바탕, 검정 글자' },
+  { bg: '#1c2b4a', fg: '#ede6d6', name: '남색 바탕, 미색 글자' },
+  { bg: '#33402f', fg: '#e6e2d3', name: '이끼색 바탕, 미색 글자' },
+  { bg: '#b8382a', fg: '#fbefe3', name: '붉은 바탕, 미색 글자' },
+  { bg: '#e4dcef', fg: '#2a2140', name: '연보라 바탕, 가지색 글자' },
+];
+const FONTS = {
+  sans: { family: 'Noto Sans KR', weight: 700, name: '고딕' },
+  serif: { family: 'Noto Serif KR', weight: 700, name: '명조' },
+  dodum: { family: 'Gowun Dodum', weight: 400, name: '고운돋움' },
+  pen: { family: 'Nanum Pen Script', weight: 400, name: '손글씨' },
+};
+const KEY = 'sentence-wallpaper';
+const HEX = /^#[0-9a-f]{6}$/i;
+
+const $ = (id) => document.getElementById(id);
+const textEl = $('text'), bgEl = $('bg'), fgEl = $('fg');
+const setBtn = $('set'), saveBtn = $('save');
+const phone = $('phone'), pc = $('preview'), pctx = pc.getContext('2d');
+const placeholder = textEl.placeholder;
+
+// Output size: the device's own screen in device pixels, else an iPhone 15/16 frame.
+const dpr = window.devicePixelRatio || 1;
+let W = Math.round(screen.width * dpr), H = Math.round(screen.height * dpr);
+if (H <= W || W < 700) { W = 1179; H = 2556; }
+phone.style.setProperty('--ar', `${W} / ${H}`);
+
+// Keep the clock and buttons inside the zones render.js reserves.
+const top = LAYOUT.top ?? 0.35, bottom = LAYOUT.bottom ?? 0.12;
+$('lockDate').style.top = `${top * 0.31 * 100}%`;
+$('lockTime').style.top = `${top * 0.38 * 100}%`;
+for (const b of phone.querySelectorAll('.lock-btn')) b.style.bottom = `${bottom * 0.33 * 100}%`;
+
+// State
+const state = { text: '', bg: PRESETS[0].bg, fg: PRESETS[0].fg, font: 'sans' };
+try {
+  const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+  if (saved) {
+    if (typeof saved.text === 'string') state.text = saved.text;
+    if (HEX.test(saved.bg)) state.bg = saved.bg;
+    if (HEX.test(saved.fg)) state.fg = saved.fg;
+    if (saved.font in FONTS) state.font = saved.font;
+  }
+} catch {}
+function persist() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+}
+
+// Build controls
+const colors = $('colors');
+PRESETS.forEach((p, i) => {
+  const l = document.createElement('label');
+  l.className = 'sw';
+  l.innerHTML = `<input type="radio" name="preset" value="${i}"><span aria-hidden="true">가</span>`;
+  l.firstChild.setAttribute('aria-label', p.name);
+  l.lastChild.style.cssText = `--b:${p.bg};--f:${p.fg}`;
+  colors.insertBefore(l, $('pickBg'));
+});
+const fonts = $('fonts');
+for (const [id, f] of Object.entries(FONTS)) {
+  const l = document.createElement('label');
+  l.className = 'ft';
+  l.innerHTML = `<input type="radio" name="font" value="${id}"><span></span>`;
+  l.lastChild.textContent = f.name;
+  l.lastChild.style.fontFamily = `"${f.family}"`;
+  l.lastChild.style.fontWeight = f.weight;
+  if (id === 'pen') l.lastChild.style.fontSize = '21px';
+  fonts.append(l);
+}
+
+function syncUI() {
+  textEl.value = state.text;
+  bgEl.value = state.bg;
+  fgEl.value = state.fg;
+  $('pickBg').lastChild.style.setProperty('--c', state.bg);
+  $('pickFg').lastChild.style.setProperty('--c', state.fg);
+  const i = PRESETS.findIndex((p) => p.bg === state.bg && p.fg === state.fg);
+  for (const r of colors.querySelectorAll('[name=preset]')) r.checked = +r.value === i;
+  $('pickBg').classList.toggle('on', i < 0);
+  $('pickFg').classList.toggle('on', i < 0);
+  for (const r of fonts.querySelectorAll('[name=font]')) r.checked = r.value === state.font;
+  phone.style.color = state.fg;
+  syncButtons();
+}
+function syncButtons() {
+  setBtn.disabled = saveBtn.disabled = !state.text.trim();
+  setBtn.setAttribute('aria-busy', String(preparing));
+}
+
+function update(patch) {
+  Object.assign(state, patch);
+  persist();
+  syncUI();
+  schedule();
+  prepare();
+}
+
+textEl.addEventListener('input', () => {
+  state.text = textEl.value; // don't rewrite the textarea while typing
+  persist();
+  schedule();
+  prepare();
+});
+colors.addEventListener('change', (e) => {
+  if (e.target.name === 'preset') update({ bg: PRESETS[e.target.value].bg, fg: PRESETS[e.target.value].fg });
+});
+bgEl.addEventListener('input', () => update({ bg: bgEl.value }));
+fgEl.addEventListener('input', () => update({ fg: fgEl.value }));
+fonts.addEventListener('change', (e) => update({ font: e.target.value }));
+
+// Preview: rAF-throttled, drawn at the canvas's on-screen size × dpr.
+let queued = false, drawSeq = 0;
+function schedule() {
+  if (queued) return;
+  queued = true;
+  requestAnimationFrame(async () => {
+    queued = false;
+    const seq = ++drawSeq;
+    const font = FONTS[state.font];
+    const text = state.text.trim() ? state.text : placeholder;
+    try { await ensureFont(font, text); } catch {}
+    if (seq !== drawSeq || !pc.width) return;
+    drawWallpaper(pctx, { text, bg: state.bg, fg: state.fg, font, W: pc.width, H: pc.height });
+  });
+}
+new ResizeObserver(([entry]) => {
+  const { width, height } = entry.contentRect;
+  const w = Math.round(width * dpr), h = Math.round(height * dpr);
+  if (w && (w !== pc.width || h !== pc.height)) { pc.width = w; pc.height = h; schedule(); }
+}).observe(pc);
+
+// Full-res PNG, rendered ahead of the tap so share() runs inside the user activation.
+const out = document.createElement('canvas');
+const octx = out.getContext('2d');
+let ready = null, prepTimer = 0, preparing = false;
+const stateKey = () => JSON.stringify([state.text, state.bg, state.fg, state.font]);
+
+async function build() {
+  const key = stateKey();
+  const font = FONTS[state.font];
+  try { await ensureFont(font, state.text); } catch {}
+  out.width = W; out.height = H;
+  drawWallpaper(octx, { text: state.text, bg: state.bg, fg: state.fg, font, W, H });
+  const blob = await new Promise((res, rej) => out.toBlob((b) => (b ? res(b) : rej(new Error('toBlob failed'))), 'image/png'));
+  return { key, file: new File([blob], 'wallpaper.png', { type: 'image/png' }) };
+}
+function prepare() {
+  ready = null;
+  clearTimeout(prepTimer);
+  preparing = !!state.text.trim();
+  syncButtons();
+  if (!preparing) return;
+  prepTimer = setTimeout(async () => {
+    let r = null;
+    try { r = await build(); } catch {}
+    if (r && r.key !== stateKey()) return; // a newer prepare() is already pending
+    ready = r;
+    preparing = false; // on failure the tap falls back to rendering on demand
+    syncButtons();
+  }, 300);
+}
+const readyFile = () => (ready && ready.key === stateKey() ? ready.file : null);
+async function currentFile() {
+  return readyFile() || (await build()).file;
+}
+function download(file) {
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = file.name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+setBtn.addEventListener('click', async () => {
+  if (!state.text.trim() || preparing) return;
+  // share() must be the first await so it runs inside the tap's user activation.
+  const file = readyFile() || (await build()).file;
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+    } catch (e) {
+      if (e.name !== 'AbortError') download(file); // e.g. activation expired while rendering
+    }
+  } else {
+    download(file);
+  }
+});
+saveBtn.addEventListener('click', async () => {
+  if (state.text.trim()) download(await currentFile());
+});
+
+// Lock-screen clock
+function tick() {
+  const d = new Date();
+  $('lockDate').textContent = d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' });
+  $('lockTime').textContent = `${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+tick();
+setInterval(tick, 15000);
+
+syncUI();
+schedule();
+prepare();
+// Web fonts can finish after the first draw; redraw once they do.
+document.fonts?.ready.then(schedule);
+</script>
+</body>
+</html>
