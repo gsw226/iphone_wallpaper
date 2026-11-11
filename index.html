@@ -61,13 +61,14 @@
   /* Preview */
   .stage {
     min-height: 0;
+    container-type: size;
     display: grid;
     place-items: center;
   }
   .phone {
     position: relative;
-    height: 100%;
-    max-width: 100%;
+    /* Largest frame of this aspect that fits the stage either way (iPad portrait clamps width). */
+    width: min(100cqw, 100cqh * var(--ar, 1179 / 2556));
     aspect-ratio: var(--ar, 1179 / 2556);
     container-type: inline-size;
     border-radius: 14% / 6.46%;
@@ -218,6 +219,7 @@
     cursor: pointer;
     touch-action: manipulation;
   }
+  .aux span { display: flex; gap: 14px; }
   .aux button:disabled { opacity: 0.5; cursor: default; }
   .aux :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 2px; }
 
@@ -251,7 +253,7 @@
 
   <form class="controls" id="form" onsubmit="return false">
     <label class="sr" for="text">문장</label>
-    <textarea id="text" rows="2" placeholder="천천히, 그러나 멈추지 않고." autocomplete="off" spellcheck="false"></textarea>
+    <textarea id="text" rows="2" placeholder="천천히, 그러나 멈추지 않고." maxlength="500" autocomplete="off" spellcheck="false"></textarea>
 
     <fieldset class="colors" id="colors">
       <legend class="sr">색</legend>
@@ -266,7 +268,10 @@
     <button type="button" class="set" id="set">배경화면으로 설정</button>
     <div class="aux">
       <button type="button" id="save">이미지로 저장</button>
-      <a href="README.md#단축어-설치">단축어 설치 방법</a>
+      <span>
+        <a href="https://gsw226.github.io/iphone_wallpaper/shortcut/%EB%AC%B8%EC%9E%A5%20%EB%B0%B0%EA%B2%BD%ED%99%94%EB%A9%B4.shortcut">단축어 받기</a>
+        <a href="https://github.com/gsw226/iphone_wallpaper#단축어-설치">단축어 설치 방법</a>
+      </span>
     </div>
   </form>
 </main>
@@ -304,10 +309,9 @@ if (H <= W || W < 700) { W = 1179; H = 2556; }
 phone.style.setProperty('--ar', `${W} / ${H}`);
 
 // Keep the clock and buttons inside the zones render.js reserves.
-const top = LAYOUT.top ?? 0.35, bottom = LAYOUT.bottom ?? 0.12;
-$('lockDate').style.top = `${top * 0.31 * 100}%`;
-$('lockTime').style.top = `${top * 0.38 * 100}%`;
-for (const b of phone.querySelectorAll('.lock-btn')) b.style.bottom = `${bottom * 0.33 * 100}%`;
+$('lockDate').style.top = `${LAYOUT.top * 0.31 * 100}%`;
+$('lockTime').style.top = `${LAYOUT.top * 0.38 * 100}%`;
+for (const b of phone.querySelectorAll('.lock-btn')) b.style.bottom = `${LAYOUT.bottom * 0.33 * 100}%`;
 
 // State
 const state = { text: '', bg: PRESETS[0].bg, fg: PRESETS[0].fg, font: 'sans' };
@@ -317,7 +321,7 @@ try {
     if (typeof saved.text === 'string') state.text = saved.text;
     if (HEX.test(saved.bg)) state.bg = saved.bg;
     if (HEX.test(saved.fg)) state.fg = saved.fg;
-    if (saved.font in FONTS) state.font = saved.font;
+    if (Object.hasOwn(FONTS, saved.font)) state.font = saved.font;
   }
 } catch {}
 function persist() {
@@ -386,7 +390,8 @@ bgEl.addEventListener('input', () => update({ bg: bgEl.value }));
 fgEl.addEventListener('input', () => update({ fg: fgEl.value }));
 fonts.addEventListener('change', (e) => update({ font: e.target.value }));
 
-// Preview: rAF-throttled, drawn at the canvas's on-screen size × dpr.
+// Preview: rAF-throttled, canvas at its on-screen size × dpr, drawn in export coordinates
+// so line breaks match the PNG exactly.
 let queued = false, drawSeq = 0;
 function schedule() {
   if (queued) return;
@@ -398,7 +403,8 @@ function schedule() {
     const text = state.text.trim() ? state.text : placeholder;
     try { await ensureFont(font, text); } catch {}
     if (seq !== drawSeq || !pc.width) return;
-    drawWallpaper(pctx, { text, bg: state.bg, fg: state.fg, font, W: pc.width, H: pc.height });
+    pctx.setTransform(pc.width / W, 0, 0, pc.height / H, 0, 0);
+    drawWallpaper(pctx, { text, bg: state.bg, fg: state.fg, font, W, H });
   });
 }
 new ResizeObserver(([entry]) => {
@@ -411,14 +417,16 @@ new ResizeObserver(([entry]) => {
 const out = document.createElement('canvas');
 const octx = out.getContext('2d');
 let ready = null, prepTimer = 0, preparing = false;
-const stateKey = () => JSON.stringify([state.text, state.bg, state.fg, state.font]);
+const keyOf = (s) => JSON.stringify([s.text, s.bg, s.fg, s.font]);
+const stateKey = () => keyOf(state);
 
 async function build() {
-  const key = stateKey();
-  const font = FONTS[state.font];
-  try { await ensureFont(font, state.text); } catch {}
+  const s = { ...state }; // the PNG must match its key even if state changes while fonts load
+  const key = keyOf(s);
+  const font = FONTS[s.font];
+  try { await ensureFont(font, s.text); } catch {}
   out.width = W; out.height = H;
-  drawWallpaper(octx, { text: state.text, bg: state.bg, fg: state.fg, font, W, H });
+  drawWallpaper(octx, { text: s.text, bg: s.bg, fg: s.fg, font, W, H });
   const blob = await new Promise((res, rej) => out.toBlob((b) => (b ? res(b) : rej(new Error('toBlob failed'))), 'image/png'));
   return { key, file: new File([blob], 'wallpaper.png', { type: 'image/png' }) };
 }
@@ -428,19 +436,21 @@ function prepare() {
   preparing = !!state.text.trim();
   syncButtons();
   if (!preparing) return;
-  prepTimer = setTimeout(async () => {
-    let r = null;
-    try { r = await build(); } catch {}
-    if (r && r.key !== stateKey()) return; // a newer prepare() is already pending
-    ready = r;
-    preparing = false; // on failure the tap falls back to rendering on demand
-    syncButtons();
-  }, 300);
+  prepTimer = setTimeout(buildNow, 300);
+}
+// Render now (debounce fired, or a tap beat it). Resolves to the build or null, never rejects.
+async function buildNow() {
+  clearTimeout(prepTimer);
+  const key = stateKey();
+  let r = null;
+  try { r = await build(); } catch {}
+  if (key !== stateKey()) return r; // a newer prepare() is already pending
+  ready = r;
+  preparing = false; // on failure the next tap renders on demand
+  syncButtons();
+  return r;
 }
 const readyFile = () => (ready && ready.key === stateKey() ? ready.file : null);
-async function currentFile() {
-  return readyFile() || (await build()).file;
-}
 function download(file) {
   const url = URL.createObjectURL(file);
   const a = document.createElement('a');
@@ -452,23 +462,27 @@ function download(file) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
-setBtn.addEventListener('click', async () => {
-  if (!state.text.trim() || preparing) return;
-  // share() must be the first await so it runs inside the tap's user activation.
-  const file = readyFile() || (await build()).file;
-  if (navigator.canShare?.({ files: [file] })) {
+// Both buttons open the share sheet: pick the shortcut, or "이미지 저장" to put it in Photos.
+let sharing = false;
+async function share() {
+  if (!state.text.trim() || sharing) return; // a second share while one is open is rejected by WebKit
+  sharing = true;
+  try {
+    // With a ready file, share() is the first await so it runs inside the tap's user activation.
+    const file = readyFile() || (await buildNow())?.file;
+    if (!file) return;
+    if (!navigator.canShare?.({ files: [file] })) return download(file);
     try {
       await navigator.share({ files: [file] });
     } catch (e) {
-      if (e.name !== 'AbortError') download(file); // e.g. activation expired while rendering
+      if (e.name === 'NotAllowedError') download(file); // activation expired while rendering
     }
-  } else {
-    download(file);
+  } finally {
+    sharing = false;
   }
-});
-saveBtn.addEventListener('click', async () => {
-  if (state.text.trim()) download(await currentFile());
-});
+}
+setBtn.addEventListener('click', share);
+saveBtn.addEventListener('click', share);
 
 // Lock-screen clock
 function tick() {

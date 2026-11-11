@@ -51,6 +51,8 @@ export function fitText(text, { width, height, maxSize, minSize, lineHeight }, m
 
 export function layout(text, W, H, measureAt) {
   const L = LAYOUT;
+  // Drop blank lines at the edges (e.g. a trailing Enter) so they don't shift centering; inner ones stay.
+  text = text.replace(/^\s*\n|\n\s*$/g, '');
   const box = { x: W * L.side, y: H * L.top, w: W * (1 - 2 * L.side), h: H * (1 - L.top - L.bottom) };
   const { fontSize, lines } = fitText(text, {
     width: box.w, height: box.h, maxSize: L.maxSize * W, minSize: L.minSize * W, lineHeight: L.lineHeight,
@@ -77,7 +79,8 @@ export function drawWallpaper(ctx, { text, bg, fg, font, W, H }) {
 export async function ensureFont(font, text) {
   if (typeof document === 'undefined' || !document.fonts) return;
   try {
-    await document.fonts.load(`${font.weight} 64px "${font.family}"`, text || ' ');
+    // '…' comes from fitText, not the user's text, so request its glyph too.
+    await document.fonts.load(`${font.weight} 64px "${font.family}"`, `${text || ''}…`);
   } catch {
     // Font failed to load: draw with the fallback rather than block the user.
   }

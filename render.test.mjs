@@ -60,6 +60,8 @@ assert.equal(fitText('hi', { ...box, maxSize: 90.7, minSize: 35.2 }, measureAt).
   assert.equal(r.lines[0].text, 'hi');
   assert.equal(r.lines[0].x, 500);
   assert.ok(Math.abs(r.lines[0].y - (r.box.y + r.box.h / 2)) < 1e-9, 'single line vertically centered');
+  assert.deepEqual(layout('\n \nhi\n\n', W, H, measureAt), r, 'leading/trailing blank lines ignored');
+  assert.equal(layout('a\n\nb\n', W, H, measureAt).lines.length, 3, 'inner blank line kept');
 
   const m = layout('가'.repeat(40) + '\n\n끝', W, H, measureAt);
   const lh = m.fontSize * LAYOUT.lineHeight;
@@ -109,7 +111,7 @@ await ensureFont({ family: 'X', weight: 400 }, 'hi'); // no document in Node: no
   globalThis.document = { fonts: { load: async (...a) => { seen.push(a); throw new Error('net'); } } };
   await ensureFont({ family: 'Gowun Dodum', weight: 400 }, '안녕');
   delete globalThis.document;
-  assert.deepEqual(seen, [['400 64px "Gowun Dodum"', '안녕']], 'loads with text sample, swallows errors');
+  assert.deepEqual(seen, [['400 64px "Gowun Dodum"', '안녕…']], 'loads with text sample plus the fitText ellipsis, swallows errors');
 }
 
 console.log('ok');
