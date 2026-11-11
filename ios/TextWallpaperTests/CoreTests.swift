@@ -1,5 +1,7 @@
 import XCTest
 import SwiftUI
+import ImageIO
+import UniformTypeIdentifiers
 @testable import TextWallpaper
 
 @MainActor
@@ -21,12 +23,18 @@ final class DesignStoreTests: XCTestCase {
         return d
     }
 
-    private func solidImage(_ size: CGSize, _ color: UIColor = .red) -> UIImage {
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
-            color.setFill(); ctx.fill(CGRect(origin: .zero, size: size))
-        }
+    /// Solid grey PNG, built in an 8-bit grey bitmap so huge sizes stay cheap.
+    private func solidPNG(_ size: CGSize, gray: CGFloat = 0.5) -> Data {
+        let ctx = CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8,
+                            bytesPerRow: 0, space: CGColorSpaceCreateDeviceGray(),
+                            bitmapInfo: CGImageAlphaInfo.none.rawValue)!
+        ctx.setFillColor(gray: gray, alpha: 1)
+        ctx.fill(CGRect(origin: .zero, size: size))
+        let data = NSMutableData()
+        let dest = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil)!
+        CGImageDestinationAddImage(dest, ctx.makeImage()!, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(dest))
+        return data as Data
     }
 
     func testSaveNowRoundTrips() {
@@ -65,9 +73,23 @@ final class DesignStoreTests: XCTestCase {
         assertIsDefault(DesignStore(directory: dir).design)
     }
 
-    func testSetPhotoWritesFileAndReloads() throws {
+    func testCorruptJSONIsPreservedAsBadFile() throws {
+        let bad = Data("{not json".utf8)
+        try bad.write(to: dir.appending(path: "design.json"))
         let store = DesignStore(directory: dir)
-        store.setPhoto(solidImage(CGSize(width: 400, height: 800)))
+        store.saveNow()
+        XCTAssertEqual(try Data(contentsOf: dir.appending(path: "design.bad.json")), bad)
+    }
+
+    func testInitDeletesUnreferencedPhotos() throws {
+        try Data("x".utf8).write(to: dir.appending(path: "photo-orphan.jpg"))
+        _ = DesignStore(directory: dir)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appending(path: "photo-orphan.jpg").path))
+    }
+
+    func testSetPhotoWritesFileAndReloads() async throws {
+        let store = DesignStore(directory: dir)
+        try await store.setPhoto(solidPNG(CGSize(width: 400, height: 800)))
         guard case .photo(let name) = store.design.background else { return XCTFail("not photo") }
         XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appending(path: name).path))
         XCTAssertNotNil(store.photo)
@@ -77,29 +99,41 @@ final class DesignStoreTests: XCTestCase {
         XCTAssertNotNil(reloaded.photo)
     }
 
-    func testSetPhotoReplacesPreviousFile() throws {
+    func testSetPhotoReplacesPreviousFile() async throws {
         let store = DesignStore(directory: dir)
-        store.setPhoto(solidImage(CGSize(width: 400, height: 800)))
+        try await store.setPhoto(solidPNG(CGSize(width: 400, height: 800)))
         guard case .photo(let first) = store.design.background else { return XCTFail() }
-        store.setPhoto(solidImage(CGSize(width: 400, height: 800), .blue))
+        try await store.setPhoto(solidPNG(CGSize(width: 400, height: 800), gray: 0.2))
         guard case .photo(let second) = store.design.background else { return XCTFail() }
         XCTAssertNotEqual(first, second)
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appending(path: first).path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appending(path: second).path))
     }
 
-    func testSetPhotoDownscalesHugeImage() {
+    func testSetPhotoDownscalesHugeImage() async throws {
         let store = DesignStore(directory: dir)
         let out = WallpaperRenderer.outputSize
-        store.setPhoto(solidImage(CGSize(width: out.width * 4, height: out.height * 4)))
+        try await store.setPhoto(solidPNG(CGSize(width: out.width * 4, height: out.height * 4)))
         let px = store.photo!.size.width * store.photo!.scale
         XCTAssertLessThanOrEqual(px, out.width * 1.5 + 1)
         XCTAssertGreaterThanOrEqual(px, out.width * 1.5 - 1)
     }
 
-    func testClearPhotoDeletesFileAndSetsColor() {
+    /// A panorama must still shrink: cropped to the output aspect, at most 1.5× output.
+    func testSetPhotoCropsAndDownscalesPanorama() async throws {
         let store = DesignStore(directory: dir)
-        store.setPhoto(solidImage(CGSize(width: 400, height: 800)))
+        let out = WallpaperRenderer.outputSize
+        try await store.setPhoto(solidPNG(CGSize(width: 16000, height: 3400)))
+        let cg = try XCTUnwrap(store.photo?.cgImage)
+        let w = CGFloat(cg.width), h = CGFloat(cg.height)
+        XCTAssertLessThanOrEqual(w, out.width * 1.5 + 1)
+        XCTAssertLessThanOrEqual(h, out.height * 1.5 + 1)
+        XCTAssertEqual(w, h * out.width / out.height, accuracy: 1)
+    }
+
+    func testClearPhotoDeletesFileAndSetsColor() async throws {
+        let store = DesignStore(directory: dir)
+        try await store.setPhoto(solidPNG(CGSize(width: 400, height: 800)))
         guard case .photo(let name) = store.design.background else { return XCTFail() }
         store.clearPhoto(color: .black)
         XCTAssertEqual(store.design.background, .color(.black))

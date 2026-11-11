@@ -8,6 +8,7 @@ struct EditorInspector: View {
     @ObservedObject var store: DesignStore
     @Binding var selection: TextBlock.ID?
     var focus: FocusState<Bool>.Binding
+    var onPhotoError: () -> Void = {}
 
     @State private var photoItem: PhotosPickerItem?
     @State private var lastColor = Self.defaultColor
@@ -38,15 +39,18 @@ struct EditorInspector: View {
         .onAppear {
             if case .color(let c) = store.design.background { lastColor = c }
         }
-        .onChange(of: photoItem) { _, item in
-            guard let item else { return }
-            Task {
-                if let data = try? await item.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    store.setPhoto(image)
+        // A new pick, a color pick or 지우기 changes photoItem, which cancels this load.
+        .task(id: photoItem) {
+            guard let item = photoItem else { return }
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self) else {
+                    throw CocoaError(.fileReadCorruptFile)
                 }
-                photoItem = nil
+                try await store.setPhoto(data)
+            } catch {
+                if !Task.isCancelled { onPhotoError() }
             }
+            if !Task.isCancelled { photoItem = nil }
         }
     }
 
@@ -185,6 +189,7 @@ struct EditorInspector: View {
             },
             set: { c in
                 lastColor = c
+                photoItem = nil
                 if hasPhoto { store.clearPhoto(color: c) } else { store.design.background = .color(c) }
             })
     }
@@ -202,7 +207,10 @@ struct EditorInspector: View {
             LabeledContent("사진") {
                 HStack(spacing: 16) {
                     if hasPhoto {
-                        Button("지우기", role: .destructive) { store.clearPhoto(color: lastColor) }
+                        Button("지우기", role: .destructive) {
+                            photoItem = nil
+                            store.clearPhoto(color: lastColor)
+                        }
                     }
                     PhotosPicker(selection: $photoItem, matching: .images) {
                         Text(hasPhoto ? "다른 사진" : "사진 선택")

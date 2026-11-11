@@ -6,16 +6,15 @@ enum ApplyService {
     static let shortcutName = "문장 배경화면"
 
     /// Hands the PNG to the "문장 배경화면" shortcut via the clipboard, which sets the lock screen.
-    /// Returns false (and touches nothing) when the Shortcuts app can't be opened.
+    /// Returns false when the Shortcuts app can't be opened (touching nothing if that's known up front).
     @MainActor @discardableResult
-    static func applyViaShortcut(png: Data) -> Bool {
+    static func applyViaShortcut(png: Data) async -> Bool {
         guard let url = shortcutURL, UIApplication.shared.canOpenURL(url) else { return false }
         UIPasteboard.general.setItems(
             [[UTType.png.identifier: png]],
             options: [.expirationDate: Date().addingTimeInterval(120), .localOnly: true]
         )
-        UIApplication.shared.open(url)
-        return true
+        return await UIApplication.shared.open(url)
     }
 
     static var shortcutURL: URL? {
@@ -46,14 +45,21 @@ enum ApplyService {
         }
     }
 
-    /// Saves the PNG to Photos. Completion reports success, on the main thread.
-    @MainActor static func saveToPhotos(png: Data, completion: @escaping (Bool) -> Void) {
-        let done: (Bool) -> Void = { ok in DispatchQueue.main.async { completion(ok) } }
+    enum SaveResult { case saved, denied, failed }
+
+    /// Saves the PNG to Photos. Completion runs on the main thread; `.denied` means the
+    /// user (or a restriction) blocked Photos access, so Settings is the way out.
+    @MainActor static func saveToPhotos(png: Data, completion: @escaping (SaveResult) -> Void) {
+        let done: (SaveResult) -> Void = { r in DispatchQueue.main.async { completion(r) } }
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-            guard status == .authorized || status == .limited else { return done(false) }
+            switch status {
+            case .authorized, .limited: break
+            case .denied, .restricted: return done(.denied)
+            default: return done(.failed)
+            }
             PHPhotoLibrary.shared().performChanges({
                 PHAssetCreationRequest.forAsset().addResource(with: .photo, data: png, options: nil)
-            }) { ok, _ in done(ok) }
+            }) { ok, _ in done(ok ? .saved : .failed) }
         }
     }
 }

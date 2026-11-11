@@ -6,8 +6,11 @@ import SwiftUI
 struct EditorPreview: View {
     @ObservedObject var store: DesignStore
     @Binding var selection: TextBlock.ID?
-    @State private var dragStart: CGPoint?
-    @State private var pinchStart: Double?
+    /// Per-block drag origin, tagged with the gesture's start location so a cancelled
+    /// drag (no onEnded) can't leak its origin into the next one.
+    @State private var drags: [TextBlock.ID: (location: CGPoint, center: CGPoint)] = [:]
+    /// The block a pinch started on and its size then, tagged the same way.
+    @State private var pinchStart: (location: CGPoint, id: TextBlock.ID, size: Double)?
 
     var body: some View {
         GeometryReader { geo in
@@ -92,27 +95,30 @@ struct EditorPreview: View {
         DragGesture(minimumDistance: 4, coordinateSpace: .named(Self.space))
             .onChanged { value in
                 guard let i = index(id) else { return }
-                if dragStart == nil {
-                    dragStart = store.design.blocks[i].center
+                if drags[id]?.location != value.startLocation {
+                    drags[id] = (value.startLocation, store.design.blocks[i].center)
                     selection = id
                 }
-                guard let start = dragStart else { return }
+                guard let start = drags[id]?.center else { return }
                 store.design.blocks[i].center = CGPoint(
                     x: (start.x + value.translation.width / size.width).clamped(0, 1),
                     y: (start.y + value.translation.height / size.height).clamped(0, 1))
             }
-            .onEnded { _ in dragStart = nil }
+            .onEnded { _ in drags[id] = nil }
     }
 
-    /// Pinch anywhere on the preview resizes the selected block; a small block is
-    /// too small a target for two fingers.
+    /// Pinch anywhere on the preview resizes the block selected when it began (a
+    /// finger landing on another block mid-pinch doesn't retarget it); a small block
+    /// is too small a target for two fingers.
     private var pinch: some Gesture {
         MagnifyGesture()
             .onChanged { value in
-                guard let id = selection, let i = index(id) else { return }
-                if pinchStart == nil { pinchStart = store.design.blocks[i].size }
-                guard let start = pinchStart else { return }
-                store.design.blocks[i].size = (start * value.magnification).clamped(0.03, 0.2)
+                if pinchStart?.location != value.startLocation {
+                    guard let id = selection, let i = index(id) else { pinchStart = nil; return }
+                    pinchStart = (value.startLocation, id, store.design.blocks[i].size)
+                }
+                guard let start = pinchStart, let i = index(start.id) else { return }
+                store.design.blocks[i].size = (start.size * value.magnification).clamped(0.03, 0.2)
             }
             .onEnded { _ in pinchStart = nil }
     }

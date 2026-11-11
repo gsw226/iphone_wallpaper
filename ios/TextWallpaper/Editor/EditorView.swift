@@ -8,6 +8,8 @@ struct EditorView: View {
     @State private var toast: EditorToast?
     @State private var showInfo = false
     @State private var showFirstRunHint = false
+    @State private var showPhotosDenied = false
+    @State private var busy = false
     @FocusState private var textFocused: Bool
     @AppStorage("editor.shortcutHintSeen") private var hintSeen = false
     @Environment(\.openURL) private var openURL
@@ -20,7 +22,9 @@ struct EditorView: View {
                 .overlay(alignment: .topTrailing) { infoButton }
                 .overlay(alignment: .bottom) { toastView }
             Group {
-                EditorInspector(store: store, selection: $selection, focus: $textFocused)
+                EditorInspector(store: store, selection: $selection, focus: $textFocused) {
+                    show(EditorToast(text: "사진을 불러오지 못했어요", symbol: "exclamationmark.triangle"))
+                }
                 if !textFocused { actionBar }
             }
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
@@ -49,6 +53,10 @@ struct EditorView: View {
         } message: {
             Text("처음 한 번만 ‘\(ApplyService.shortcutName)’ 단축어를 설치하면 이 버튼으로 잠금 화면 배경을 바로 바꿀 수 있어요.")
         }
+        .alert("사진 접근이 꺼져 있어요", isPresented: $showPhotosDenied) {
+            Button("설정 열기") { openURL(URL(string: UIApplication.openSettingsURLString)!) }
+            Button("취소", role: .cancel) {}
+        }
     }
 
     // MARK: Actions
@@ -67,6 +75,7 @@ struct EditorView: View {
                     .frame(width: 24)
             }
             .accessibilityLabel("사진에 저장")
+            .disabled(busy)
 
             Button {
                 if hintSeen { apply() } else { showFirstRunHint = true }
@@ -78,30 +87,43 @@ struct EditorView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .disabled(busy)
         }
         .buttonStyle(.bordered)
         .controlSize(.large)
     }
 
+    /// Renders on main (ImageRenderer requires it) but encodes the PNG off main.
+    /// Shows the error toast and returns nil on failure.
+    private func makePNG() async -> Data? {
+        let image = WallpaperRenderer.render(store.design, photo: store.photo)
+        let png = await Task.detached { image?.pngData() }.value
+        if png == nil { show(EditorToast(text: "이미지를 만들지 못했어요", symbol: "exclamationmark.triangle")) }
+        return png
+    }
+
     private func apply() {
-        guard let png = WallpaperRenderer.pngData(store.design, photo: store.photo) else {
-            show(EditorToast(text: "이미지를 만들지 못했어요", symbol: "exclamationmark.triangle"))
-            return
-        }
-        if !ApplyService.applyViaShortcut(png: png) {
-            show(EditorToast(text: "단축어 앱을 열 수 없어요", symbol: "exclamationmark.triangle"))
+        busy = true
+        Task {
+            defer { busy = false }
+            guard let png = await makePNG() else { return }
+            if !(await ApplyService.applyViaShortcut(png: png)) {
+                show(EditorToast(text: "단축어 앱을 열 수 없어요", symbol: "exclamationmark.triangle"))
+            }
         }
     }
 
     private func save() {
-        guard let png = WallpaperRenderer.pngData(store.design, photo: store.photo) else {
-            show(EditorToast(text: "이미지를 만들지 못했어요", symbol: "exclamationmark.triangle"))
-            return
-        }
-        ApplyService.saveToPhotos(png: png) { ok in
-            Task { @MainActor in
-                show(ok ? EditorToast(text: "사진에 저장됨", symbol: "checkmark")
-                        : EditorToast(text: "저장하지 못했어요", symbol: "exclamationmark.triangle"))
+        busy = true
+        Task {
+            guard let png = await makePNG() else { busy = false; return }
+            ApplyService.saveToPhotos(png: png) { result in
+                busy = false
+                switch result {
+                case .saved: show(EditorToast(text: "사진에 저장됨", symbol: "checkmark"))
+                case .denied: showPhotosDenied = true
+                case .failed: show(EditorToast(text: "저장하지 못했어요", symbol: "exclamationmark.triangle"))
+                }
             }
         }
     }

@@ -30,6 +30,33 @@ struct Design: Codable, Equatable {
     var blocks: [TextBlock] = [TextBlock(text: "오늘도 수고했어")]
 }
 
+// Hand-written decoding so a field added later falls back to its default instead
+// of failing the whole file (Encodable stays synthesized).
+extension TextBlock {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        var b = TextBlock(text: try c.decode(String.self, forKey: .text))
+        b.id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? b.id
+        b.font = try c.decodeIfPresent(FontChoice.self, forKey: .font) ?? b.font
+        b.size = try c.decodeIfPresent(Double.self, forKey: .size) ?? b.size
+        b.color = try c.decodeIfPresent(RGBA.self, forKey: .color) ?? b.color
+        b.center = try c.decodeIfPresent(CGPoint.self, forKey: .center) ?? b.center
+        b.width = try c.decodeIfPresent(Double.self, forKey: .width) ?? b.width
+        self = b
+    }
+}
+
+extension Design {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        var d = Design()
+        d.background = try c.decodeIfPresent(Background.self, forKey: .background) ?? d.background
+        d.dim = try c.decodeIfPresent(Double.self, forKey: .dim) ?? d.dim
+        d.blocks = try c.decodeIfPresent([TextBlock].self, forKey: .blocks) ?? d.blocks
+        self = d
+    }
+}
+
 enum FontChoice: String, Codable, CaseIterable, Identifiable {
     case sans, serif, dodum, pen
     var id: String { rawValue }
